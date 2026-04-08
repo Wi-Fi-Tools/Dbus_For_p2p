@@ -17,7 +17,7 @@
 | **接口对象路径** | `/fi/w1/wpa_supplicant1/Interfaces/<N>` |
 | **P2PDevice 接口** | `fi.w1.wpa_supplicant1.Interface.P2PDevice` |
 | **Interface 接口** | `fi.w1.wpa_supplicant1.Interface` |
-| **Group 接口** | `fi.w1.wpa_supplicant1.Group` |
+| **Group 接口** | `fi.w1.wpa_supplicant1.Group`（在 `Interfaces/<N>/Groups/<id>` 对象上） |
 | **Peer 接口** | `fi.w1.wpa_supplicant1.Peer` |
 | **WPS 接口** | `fi.w1.wpa_supplicant1.Interface.WPS` |
 | **Properties 接口** | `org.freedesktop.DBus.Properties` |
@@ -392,12 +392,33 @@ flowchart TD
 
 ## Step 6: 查看 Group 信息
 
-Group 创建成功后，wpa_supplicant 会发出 `GroupStarted` 信号。你可以通过以下方式获取 Group 信息：
+Group 创建成功后，wpa_supplicant 会发出 `GroupStarted` 信号。你可以通过以下方式获取 Group 信息。
 
-### 获取 Group 对象路径
+> ⚠️ **核心概念：理解 D-Bus 对象树结构**
+>
+> `GroupAdd` 后，wpa_supplicant 会创建一个**新的虚拟接口**（如 `p2p-wlan0-0`），对应一个新的 `Interfaces/<N>` 节点。
+> **Group 对象**挂在这个新接口下面，而不是直接在 `Interfaces/<N>` 上。
+>
+> 对象树结构如下：
+> ```
+> /fi/w1/wpa_supplicant1/Interfaces/0          ← 原始 wlan0（P2PDevice 接口在这里）
+> /fi/w1/wpa_supplicant1/Interfaces/1          ← 新建的 p2p-wlan0-0（Interface、WPS 接口在这里）
+> /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 ← Group 对象（Group 接口在这里）
+> ```
+>
+> 三个路径承载不同的 D-Bus 接口：
+> | 对象路径 | 承载的接口 | 用途 |
+> |---------|-----------|------|
+> | `Interfaces/0` | `P2PDevice` | P2P 发现、建组、Group 属性查询入口 |
+> | `Interfaces/1` | `Interface`、`WPS` | 虚拟网卡接口操作、WPS 认证 |
+> | `Interfaces/1/Groups/<id>` | `Group` | Group 详细信息（Role、SSID、Members 等） |
+
+### 第一步：获取 Group 所在的接口路径
+
+`P2PDevice.Group` 属性返回的是 Group 所在的**接口路径**（不是 Group 对象本身）：
 
 ```bash
-# 查看当前 Group 对象路径
+# 在原始接口 (Interfaces/0) 上查询
 sudo busctl get-property fi.w1.wpa_supplicant1 \
   /fi/w1/wpa_supplicant1/Interfaces/0 \
   fi.w1.wpa_supplicant1.Interface.P2PDevice \
@@ -409,63 +430,91 @@ sudo busctl get-property fi.w1.wpa_supplicant1 \
 o "/fi/w1/wpa_supplicant1/Interfaces/1"
 ```
 
-> ⚠️ 注意：Group 创建后，wpa_supplicant 通常会创建一个**新的虚拟接口**（如 `p2p-wlan0-0`），Group 对象路径指向这个新接口。
+> 这个路径 `Interfaces/1` 是 Group 所在的**虚拟接口**，下文用 `$GROUP_IFACE_PATH` 表示。
 
-### 查看 Group 详细属性
+### 第二步：用 tree 或 introspect 找到 Group 对象的完整路径
 
 ```bash
-# 假设 Group 接口路径为 /fi/w1/wpa_supplicant1/Interfaces/1
+# 方式一：用 tree 查看 Interfaces/1 下的子对象
+sudo busctl tree fi.w1.wpa_supplicant1
+```
+
+输出示例：
+```
+└─/fi/w1/wpa_supplicant1/Interfaces/1
+  └─/fi/w1/wpa_supplicant1/Interfaces/1/Groups
+    └─/fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3   ← 这就是 Group 对象
+```
+
+```bash
+# 方式二：用 introspect 查看 Interfaces/1 暴露的接口和子节点
+sudo busctl introspect fi.w1.wpa_supplicant1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1
+```
+
+> 记住 Group 对象的完整路径，下文用 `$GROUP_OBJ_PATH` 表示，
+> 例如 `/fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3`。
+
+### 第三步：在 Group 对象上查看详细属性
+
+`fi.w1.wpa_supplicant1.Group` 接口的属性要在 **Group 对象路径**上查询：
+
+```bash
+# 假设 Group 对象路径为 /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3
 
 # 查看角色（GO 或 client）
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   Role
 
 # 查看 Group SSID
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   SSID
 
 # 查看 Group BSSID（GO 的 P2P 接口地址）
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   BSSID
 
 # 查看工作频率
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   Frequency
 
 # 查看密码（GO 端可用）
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   Passphrase
 
 # 查看 PSK
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   PSK
 
 # 查看已连接的成员（仅 GO 端有效）
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   Members
 
-# 用 introspect 一次性查看所有属性和方法
+# 用 introspect 一次性查看 Group 对象的所有属性和信号
 sudo busctl introspect fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3
 ```
 
-### 查看 Group 接口的网络接口名
+### 查看 Group 虚拟接口的网络接口名
+
+注意：`Ifname` 属性在 **接口路径**（`Interfaces/1`）上，不在 Group 对象上：
 
 ```bash
+# 在 Interfaces/1 上查询（不是 Groups/f3）
 sudo busctl get-property fi.w1.wpa_supplicant1 \
   /fi/w1/wpa_supplicant1/Interfaces/1 \
   fi.w1.wpa_supplicant1.Interface \
@@ -473,6 +522,18 @@ sudo busctl get-property fi.w1.wpa_supplicant1 \
 ```
 
 返回示例：`s "p2p-wlan0-0"`
+
+### 路径速查表
+
+| 你想查什么 | 对象路径 | 接口 | 属性/方法 |
+|-----------|---------|------|----------|
+| P2P 发现的 Peers | `Interfaces/0` | `P2PDevice` | `Peers` |
+| Group 所在接口 | `Interfaces/0` | `P2PDevice` | `Group` |
+| 虚拟网卡名 (p2p-wlan0-0) | `Interfaces/1` | `Interface` | `Ifname` |
+| WPS 认证 | `Interfaces/1` | `Interface.WPS` | `Start()` |
+| Group 角色/SSID/密码 | `Interfaces/1/Groups/<id>` | `Group` | `Role`/`SSID`/`Passphrase` |
+| Group 成员 | `Interfaces/1/Groups/<id>` | `Group` | `Members` |
+| PeerJoined 信号 | `Interfaces/1/Groups/<id>` | `Group` | (signal) |
 
 ---
 
@@ -539,11 +600,11 @@ sudo busctl call fi.w1.wpa_supplicant1 \
 sudo busctl monitor fi.w1.wpa_supplicant1
 ```
 
-当对端设备成功连接后，会看到 `PeerJoined` 信号：
+当对端设备成功连接后，会看到 `PeerJoined` 信号（注意 Path 是 Group 对象路径）：
 
 ```
 ‣ Type=signal  Endian=l  Flags=1  Version=1
-  Path=/fi/w1/wpa_supplicant1/Interfaces/1
+  Path=/fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3
   Interface=fi.w1.wpa_supplicant1.Group
   Member=PeerJoined
   OBJECT_PATH "/fi/w1/wpa_supplicant1/Peers/aabbccddeeff"
@@ -554,8 +615,9 @@ sudo busctl monitor fi.w1.wpa_supplicant1
 ### 查看当前 Group 成员
 
 ```bash
+# 注意：在 Group 对象路径上查询，不是 Interfaces/1
 sudo busctl get-property fi.w1.wpa_supplicant1 \
-  /fi/w1/wpa_supplicant1/Interfaces/1 \
+  /fi/w1/wpa_supplicant1/Interfaces/1/Groups/f3 \
   fi.w1.wpa_supplicant1.Group \
   Members
 ```
@@ -590,7 +652,9 @@ sudo busctl call fi.w1.wpa_supplicant1 \
 ### 销毁整个 Group
 
 ```bash
-# 终止 P2P Group（注意：需要在 Group 接口上调用）
+# 终止 P2P Group
+# 注意：Disconnect 是 P2PDevice 接口的方法，但需要在 Group 所在的虚拟接口上调用
+# 即 Interfaces/1（p2p-wlan0-0），不是 Interfaces/0（wlan0）
 sudo busctl call fi.w1.wpa_supplicant1 \
   /fi/w1/wpa_supplicant1/Interfaces/1 \
   fi.w1.wpa_supplicant1.Interface.P2PDevice \
@@ -651,25 +715,32 @@ sleep 2
 
 echo ""
 echo "=== Step 4: Get Group info ==="
-GROUP_PATH=$(sudo busctl get-property $SERVICE $IFACE_PATH $P2P_IFACE Group | awk '{print $2}' | tr -d '"')
-echo "Group path: $GROUP_PATH"
+# P2PDevice.Group 返回的是 Group 所在的接口路径（如 Interfaces/1）
+GROUP_IFACE_PATH=$(sudo busctl get-property $SERVICE $IFACE_PATH $P2P_IFACE Group | awk '{print $2}' | tr -d '"')
+echo "Group interface path: $GROUP_IFACE_PATH"
+
+# 通过 tree 找到 Group 对象的完整路径（Interfaces/1/Groups/<id>）
+# 这里用 busctl tree 解析出 Groups 下的子对象
+GROUP_OBJ_PATH=$(sudo busctl tree $SERVICE 2>/dev/null | grep "$GROUP_IFACE_PATH/Groups/" | head -1 | tr -d ' ')
+echo "Group object path: $GROUP_OBJ_PATH"
 
 echo ""
 echo "--- Group Details ---"
 echo -n "Role: "
-sudo busctl get-property $SERVICE $GROUP_PATH $GROUP_IFACE Role
+sudo busctl get-property $SERVICE $GROUP_OBJ_PATH $GROUP_IFACE Role
 echo -n "SSID: "
-sudo busctl get-property $SERVICE $GROUP_PATH $GROUP_IFACE SSID
+sudo busctl get-property $SERVICE $GROUP_OBJ_PATH $GROUP_IFACE SSID
 echo -n "Frequency: "
-sudo busctl get-property $SERVICE $GROUP_PATH $GROUP_IFACE Frequency
+sudo busctl get-property $SERVICE $GROUP_OBJ_PATH $GROUP_IFACE Frequency
 echo -n "Passphrase: "
-sudo busctl get-property $SERVICE $GROUP_PATH $GROUP_IFACE Passphrase
+sudo busctl get-property $SERVICE $GROUP_OBJ_PATH $GROUP_IFACE Passphrase
 echo -n "Interface: "
-sudo busctl get-property $SERVICE $GROUP_PATH $IFACE_IFACE Ifname
+sudo busctl get-property $SERVICE $GROUP_IFACE_PATH $IFACE_IFACE Ifname
 
 echo ""
 echo "=== Step 5: Start WPS PBC for incoming connections ==="
-sudo busctl call $SERVICE $GROUP_PATH $WPS_IFACE \
+# WPS 在 Group 所在的接口路径上操作（Interfaces/1），不是 Group 对象路径
+sudo busctl call $SERVICE $GROUP_IFACE_PATH $WPS_IFACE \
   Start "a{sv}" 2 \
     "Role" s "registrar" \
     "Type" s "pbc"
