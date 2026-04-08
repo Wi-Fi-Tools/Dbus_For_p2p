@@ -152,7 +152,21 @@ class P2PDiscovery:
 
     def _on_peer_added(self, peer_path: str):
         """Signal handler: called when a new P2P peer is discovered."""
+        # Defer property retrieval to avoid race condition:
+        # When PeerAdded signal fires, the peer object may not have
+        # its properties (HWAddress, Name, etc.) fully populated yet.
+        GLib.timeout_add(500, self._fetch_and_print_peer, str(peer_path))
+
+    def _fetch_and_print_peer(self, peer_path: str, retry_count: int = 0) -> bool:
+        """Fetch peer properties and print them. Retries if HWAddress is empty."""
+        MAX_RETRIES = 3
         peer_info = self._get_peer_info(peer_path)
+
+        # If HWAddress is still empty and we haven't exhausted retries, try again
+        if not peer_info.get("HWAddress") and retry_count < MAX_RETRIES:
+            GLib.timeout_add(500, self._fetch_and_print_peer, peer_path, retry_count + 1)
+            return False  # Don't repeat this timeout
+
         self.peers[str(peer_path)] = peer_info
         print(f"  [FOUND] Peer: {peer_info.get('Name', 'Unknown')}")
         print(f"          HWAddress: {peer_info.get('HWAddress', 'N/A')}")
@@ -160,6 +174,7 @@ class P2PDiscovery:
         print(f"          Model: {peer_info.get('Model', 'N/A')}")
         print(f"          Path: {peer_path}")
         print()
+        return False  # Don't repeat this timeout
 
     def _on_peer_removed(self, peer_path: str):
         """Signal handler: called when a P2P peer is lost."""
