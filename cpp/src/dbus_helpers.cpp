@@ -2,13 +2,11 @@
 #include <iostream>
 #include <vector>
 
-sdbus::Variant get_property(sdbus::IConnection& conn,
-                            const std::string& obj_path,
+sdbus::Variant get_property(const std::string& obj_path,
                             const std::string& iface,
                             const std::string& prop)
 {
-    auto proxy = sdbus::createProxy(conn, sdbus::ServiceName{nm::BUS_NAME},
-                                    sdbus::ObjectPath{obj_path});
+    auto proxy = sdbus::createProxy(nm::BUS_NAME, sdbus::ObjectPath{obj_path});
     sdbus::Variant result;
     proxy->callMethod("Get")
          .onInterface(nm::DBUS_PROPS_IFACE)
@@ -17,12 +15,10 @@ sdbus::Variant get_property(sdbus::IConnection& conn,
     return result;
 }
 
-VariantMap get_all_properties(sdbus::IConnection& conn,
-                              const std::string& obj_path,
+VariantMap get_all_properties(const std::string& obj_path,
                               const std::string& iface)
 {
-    auto proxy = sdbus::createProxy(conn, sdbus::ServiceName{nm::BUS_NAME},
-                                    sdbus::ObjectPath{obj_path});
+    auto proxy = sdbus::createProxy(nm::BUS_NAME, sdbus::ObjectPath{obj_path});
     VariantMap result;
     proxy->callMethod("GetAll")
          .onInterface(nm::DBUS_PROPS_IFACE)
@@ -31,10 +27,8 @@ VariantMap get_all_properties(sdbus::IConnection& conn,
     return result;
 }
 
-std::optional<std::string> find_p2p_device(sdbus::IConnection& conn)
-{
-    auto nm_proxy = sdbus::createProxy(conn, sdbus::ServiceName{nm::BUS_NAME},
-                                       sdbus::ObjectPath{nm::OBJ_PATH});
+std::optional<std::string> find_p2p_device() {
+    auto nm_proxy = sdbus::createProxy(nm::BUS_NAME, sdbus::ObjectPath{nm::OBJ_PATH});
 
     std::vector<sdbus::ObjectPath> devices;
     nm_proxy->callMethod("GetDevices")
@@ -43,11 +37,11 @@ std::optional<std::string> find_p2p_device(sdbus::IConnection& conn)
 
     for (const auto& dev_path : devices) {
         try {
-            auto dev_type_var = get_property(conn, dev_path, nm::DEVICE_IFACE, "DeviceType");
+            auto dev_type_var = get_property(dev_path, nm::DEVICE_IFACE, "DeviceType");
             uint32_t dev_type = dev_type_var.get<uint32_t>();
 
             if (dev_type == nm::DEVICE_TYPE_WIFI_P2P) {
-                auto iface_var = get_property(conn, dev_path, nm::DEVICE_IFACE, "Interface");
+                auto iface_var = get_property(dev_path, nm::DEVICE_IFACE, "Interface");
                 std::string iface_name = iface_var.get<std::string>();
                 std::cout << "[+] Found Wi-Fi P2P device: " << iface_name
                           << " (" << dev_path << ")" << std::endl;

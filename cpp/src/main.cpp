@@ -20,20 +20,20 @@ int main(int argc, char* argv[])
 {
     const std::string target_peer_address = "62:4B:7C:9E:06:7E";
 
-    // Create system bus connection
-    std::unique_ptr<sdbus::IConnection> conn;
-    try {
-        conn = sdbus::createSystemBusConnection();
-    } catch (const sdbus::Error& e) {
-        std::cerr << "[-] Failed to connect to system D-Bus: " << e.what() << std::endl;
-        return 1;
-    }
+    // // Create system bus connection
+    // std::unique_ptr<sdbus::IConnection> conn;
+    // try {
+    //     conn = sdbus::createSystemBusConnection();
+    // } catch (const sdbus::Error& e) {
+    //     std::cerr << "[-] Failed to connect to system D-Bus: " << e.what() << std::endl;
+    //     return 1;
+    // }
 
-    // Enter the event loop on a separate thread so signals are processed
-    conn->enterEventLoopAsync();
+    // // Enter the event loop on a separate thread so signals are processed
+    // conn->enterEventLoopAsync();
 
     // Find P2P device
-    auto p2p_dev_path = find_p2p_device(*conn);
+    auto p2p_dev_path = find_p2p_device();
     if (!p2p_dev_path) {
         std::cerr << "[-] No Wi-Fi P2P device found. "
                   << "Ensure your hardware supports P2P and is enabled." << std::endl;
@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
     std::cout << "[+] Using P2P device at " << *p2p_dev_path << std::endl;
 
     // Start peer discovery
-    P2PDiscovery discovery(*conn, *p2p_dev_path, target_peer_address);
+    P2PDiscovery discovery(*p2p_dev_path, target_peer_address);
     auto peers = discovery.start_discovery();
 
     if (peers.empty()) {
@@ -57,10 +57,14 @@ int main(int argc, char* argv[])
 
     auto target_info = discovery.get_target_info();
     if (target_info) {
-        create_p2p_connection(*conn, *p2p_dev_path, *target_info);
+        std::cout << "[+] Target peer info:" << std::endl;
+        std::cout << "    Name: " << (target_info->name.empty() ? "Unknown" : target_info->name) << std::endl;
+        std::cout << "    HwAddress: " << (target_info->hw_address.empty() ? "N/A" : target_info->hw_address) << std::endl;
+        std::cout << "    Path: " << target_info->path << std::endl;
+        create_p2p_connection(*p2p_dev_path, *target_info);
     }
 
-    // Keep running until interrupted
+    // // Keep running until interrupted
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 

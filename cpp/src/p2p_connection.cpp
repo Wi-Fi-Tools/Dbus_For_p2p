@@ -6,7 +6,6 @@
 using NMConnectionSettings = std::map<std::string, std::map<std::string, sdbus::Variant>>;
 
 std::optional<std::string> create_p2p_connection(
-    sdbus::IConnection& conn,
     const std::string& p2p_dev_path,
     const PeerInfo& peer_info,
     const std::string& con_name)
@@ -37,8 +36,7 @@ std::optional<std::string> create_p2p_connection(
 
     // Call AddAndActivateConnection
     // This creates the connection profile AND activates it in one step
-    auto nm_proxy = sdbus::createProxy(conn, sdbus::ServiceName{nm::BUS_NAME},
-                                       sdbus::ObjectPath{nm::OBJ_PATH});
+    auto nm_proxy = sdbus::createProxy(nm::BUS_NAME, sdbus::ObjectPath{nm::OBJ_PATH});
 
     try {
         std::cout << "[*] Calling AddAndActivateConnection..." << std::endl;

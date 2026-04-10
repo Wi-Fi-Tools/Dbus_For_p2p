@@ -12,24 +12,21 @@ static std::string to_lower(const std::string& s) {
     return result;
 }
 
-P2PDiscovery::P2PDiscovery(sdbus::IConnection& bus,
-                           const std::string& p2p_dev_path,
+P2PDiscovery::P2PDiscovery(const std::string& p2p_dev_path,
                            const std::string& target_peer_address,
                            int timeout)
-    : bus_(bus)
-    , p2p_dev_path_(p2p_dev_path)
+    : p2p_dev_path_(p2p_dev_path)
     , target_peer_address_(target_peer_address)
     , timeout_(timeout)
 {
 }
 
-PeerInfo P2PDiscovery::get_peer_info(const std::string& peer_path)
-{
+PeerInfo P2PDiscovery::get_peer_info(const std::string& peer_path) {
     PeerInfo info;
     info.path = peer_path;
 
     try {
-        auto props = get_all_properties(bus_, peer_path, nm::WIFI_P2P_PEER_IFACE);
+        auto props = get_all_properties(peer_path, nm::WIFI_P2P_PEER_IFACE);
 
         if (props.count("Name")) {
             info.name = props["Name"].get<std::string>();
@@ -45,8 +42,7 @@ PeerInfo P2PDiscovery::get_peer_info(const std::string& peer_path)
     return info;
 }
 
-void P2PDiscovery::on_peer_added(const sdbus::ObjectPath& peer_path)
-{
+void P2PDiscovery::on_peer_added(const sdbus::ObjectPath& peer_path) {
     auto info = get_peer_info(std::string(peer_path));
     peers_[std::string(peer_path)] = info;
 
@@ -66,8 +62,7 @@ void P2PDiscovery::on_peer_added(const sdbus::ObjectPath& peer_path)
     }
 }
 
-void P2PDiscovery::on_peer_removed(const sdbus::ObjectPath& peer_path)
-{
+void P2PDiscovery::on_peer_removed(const sdbus::ObjectPath& peer_path) {
     auto it = peers_.find(std::string(peer_path));
     std::string name = "Unknown";
     if (it != peers_.end()) {
@@ -77,19 +72,17 @@ void P2PDiscovery::on_peer_removed(const sdbus::ObjectPath& peer_path)
     std::cout << "  [LOST]  Peer: " << name << " (" << peer_path << ")" << std::endl;
 }
 
-std::map<std::string, PeerInfo> P2PDiscovery::start_discovery()
-{
+std::map<std::string, PeerInfo> P2PDiscovery::start_discovery() {
     std::cout << "\n[*] Starting P2P peer discovery (timeout: " << timeout_ << "s)..." << std::endl;
     std::cout << std::string(60, '-') << std::endl;
 
     // Create proxy for the P2P device to register signals and call methods
-    signal_proxy_ = sdbus::createProxy(bus_, sdbus::ServiceName{nm::BUS_NAME},
-                                       sdbus::ObjectPath{p2p_dev_path_});
+    signal_proxy_ = sdbus::createProxy(nm::BUS_NAME, sdbus::ObjectPath{p2p_dev_path_});
 
     // Subscribe to PeerAdded signal
     signal_proxy_->registerSignalHandler(
-        sdbus::InterfaceName{nm::WIFI_P2P_IFACE},
-        sdbus::SignalName{"PeerAdded"},
+        nm::WIFI_P2P_IFACE, 
+        "PeerAdded",
         [this](sdbus::Signal& signal) {
             sdbus::ObjectPath peer_path;
             signal >> peer_path;
@@ -99,8 +92,8 @@ std::map<std::string, PeerInfo> P2PDiscovery::start_discovery()
 
     // Subscribe to PeerRemoved signal
     signal_proxy_->registerSignalHandler(
-        sdbus::InterfaceName{nm::WIFI_P2P_IFACE},
-        sdbus::SignalName{"PeerRemoved"},
+        nm::WIFI_P2P_IFACE,
+        "PeerRemoved",
         [this](sdbus::Signal& signal) {
             sdbus::ObjectPath peer_path;
             signal >> peer_path;
@@ -112,7 +105,7 @@ std::map<std::string, PeerInfo> P2PDiscovery::start_discovery()
 
     // Check already-known peers
     try {
-        auto peers_var = get_property(bus_, p2p_dev_path_, nm::WIFI_P2P_IFACE, "Peers");
+        auto peers_var = get_property(p2p_dev_path_, nm::WIFI_P2P_IFACE, "Peers");
         auto existing_peers = peers_var.get<std::vector<sdbus::ObjectPath>>();
         for (const auto& peer_path : existing_peers) {
             on_peer_added(peer_path);

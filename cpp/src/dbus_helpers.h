@@ -35,20 +35,18 @@ using ConnectionSettings = std::map<std::string, VariantMap>;
 /**
  * Get a single D-Bus property from a NetworkManager object.
  */
-sdbus::Variant get_property(sdbus::IConnection& conn,
-                            const std::string& obj_path,
+sdbus::Variant get_property(const std::string& obj_path,
                             const std::string& iface,
                             const std::string& prop);
 
 /**
  * Get all D-Bus properties from a NetworkManager object.
  */
-VariantMap get_all_properties(sdbus::IConnection& conn,
-                              const std::string& obj_path,
+VariantMap get_all_properties(const std::string& obj_path,
                               const std::string& iface);
 
 /**
  * Find the first Wi-Fi P2P device managed by NetworkManager.
  * Returns the D-Bus object path of the P2P device, or std::nullopt if not found.
  */
-std::optional<std::string> find_p2p_device(sdbus::IConnection& conn);
+std::optional<std::string> find_p2p_device();

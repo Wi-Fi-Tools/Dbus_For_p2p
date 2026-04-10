@@ -7,6 +7,7 @@
 #include <functional>
 #include <atomic>
 #include <memory>
+#include <glib.h>
 
 /**
  * Peer information structure.
@@ -22,10 +23,9 @@ struct PeerInfo {
  */
 class P2PDiscovery {
 public:
-    P2PDiscovery(sdbus::IConnection& bus,
-                 const std::string& p2p_dev_path,
+    P2PDiscovery(const std::string& p2p_dev_path,
                  const std::string& target_peer_address,
-                 int timeout = 600);
+                 int timeout = 15);
 
     ~P2PDiscovery() = default;
 
@@ -49,8 +49,7 @@ private:
     void on_peer_added(const sdbus::ObjectPath& peer_path);
     void on_peer_removed(const sdbus::ObjectPath& peer_path);
     PeerInfo get_peer_info(const std::string& peer_path);
-
-    sdbus::IConnection& bus_;
+    
     std::string p2p_dev_path_;
     std::string target_peer_address_;
     int timeout_;
